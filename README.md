@@ -2,6 +2,38 @@
 
 This implementation extends classic DQN with a modern Rainbow-IQN stack, combining distributional RL (IQN), Munchausen-augmented targets, intrinsic exploration (RND + NovelD), and a dual-head dueling architecture over a shared IMPALA encoder — alongside standard Rainbow upgrades: Double DQN, Dueling networks, NoisyNet, Prioritized Experience Replay, and n-step returns. It is trained on the [Crafter](https://github.com/danijar/crafter) benchmark (Hafner et al., 2021).
 
+<p align="center">
+  <img src="results/demo_episode.gif" width="360" alt="Rainbow-IQN agent gameplay on Crafter">
+  &nbsp;
+  <img src="results/demo_episode_dreamer_V3.gif" width="360" alt="DreamerV3 agent gameplay on Crafter">
+</p>
+
+<p align="center"><sub><b>Left:</b> Rainbow-IQN (CS 9.56%) &nbsp;·&nbsp; <b>Right:</b> DreamerV3 size50m (CS 17.05%)</sub></p>
+
+---
+
+## Algorithm Components
+
+**Implicit Quantile Networks (IQN)** — Models the full return distribution $Z(s, a)$ using sampled quantiles instead of predicting a single scalar $Q(s, a)$. It maps uniformly sampled probabilities $\tau \sim U(0, 1)$ to quantile values and is trained via the quantile Huber loss, allowing for a more flexible and continuous representation of the return distribution than categorical alternatives like C51.
+
+**Munchausen RL** — Augments the Bellman target for the extrinsic head by adding a clipped log-policy bonus to the immediate reward and a penalty to the bootstrap term. Following Vieillard et al. (2020), $\log \pi$ is derived entirely from the target network's softmax distribution to guarantee training stability.
+
+**Dual-head IQN** — Features a shared IMPALA-style convolutional encoder and quantile embedding network, which branches into two independent dueling heads for separate extrinsic and intrinsic value estimation. The intrinsic head uses a shorter discount ($\gamma_{\text{int}} = 0.9$) to prevent long-horizon curiosity traps, and its loss is down-weighted by $0.25\times$ to ensure the shared encoder remains primarily shaped by the extrinsic objective — a design principle inspired by NGU and Agent57.
+
+**RND + NovelD** — Combines Random Network Distillation for state novelty estimation with NovelD, which computes transition-based intrinsic rewards. NovelD ensures the agent is rewarded specifically for crossing into novel states, preventing reward stagnation in already-explored areas.
+
+**IMPALA-style encoder** — A deep residual convolutional network optimized for pixel-based RL, providing robust visual representations in complex environments such as Procgen or Crafter.
+
+**NoisyNet** — Replaces $\varepsilon$-greedy with parameter-space exploration via learned noise layers, enabling more structured and state-dependent exploration.
+
+**Prioritized Experience Replay (PER)** — SumTree-backed replay buffer that samples high-priority transitions more frequently, using mean quantile Huber loss as the TD-error proxy. Sampling bias is corrected with annealed importance-sampling weights ($\beta$).
+
+**Rainbow staples** — Double DQN (online selects, target evaluates), dueling value/advantage decomposition, n-step returns ($n = 3$), and hard target sync every 2000 learn steps (soft Polyak was unstable for distributional Q).
+
+**Replay buffer persistence** — Network checkpoints plus compressed `.npz` buffer snapshots for crash recovery without losing experience.
+
+---
+
 The goal of this project was to build a **state-of-the-art DQN implementation** with the latest tricks from the literature — without switching to model-based RL. After a full training run (1M environment steps), the agent reaches a **Crafter Score of 9.56%** in a 429-episode post-training evaluation — well above classic Rainbow (~4.3%) and competitive with DreamerV2 (~10%), but below a **hardware-constrained DreamerV3** run (17.05% on the same eval protocol; see comparison below).
 
 ![Training curve: rolling Crafter Score](results/crafter_score_pct_train.png)
@@ -24,16 +56,6 @@ The primary metric is **Crafter Score**: \( S = \exp(\mean(\ln(1 + s_i\%))) - 1 
 | Mean length | 207.4 | 231.6 |
 | Achievements/ep | 7.8 | 11.4 |
 | Unique unlocked | 15/22 | 16/22 |
-
-### Demo episodes
-
-<p align="center">
-  <img src="results/demo_episode.gif" width="420" alt="Rainbow-IQN agent gameplay on Crafter">
-  &nbsp;&nbsp;
-  <img src="results/demo_episode_dreamer_V3.gif" width="420" alt="DreamerV3 agent gameplay on Crafter">
-</p>
-
-<p align="center"><sub><b>Left:</b> Rainbow-IQN (CS 9.56%) &nbsp;·&nbsp; <b>Right:</b> DreamerV3 size50m (CS 17.05%)</sub></p>
 
 > **Note on DreamerV3:** The attached DreamerV3 checkpoint is **not** the full paper configuration. It was trained with the `size50m` preset (~41M params) on an **RTX 3070 8 GB** GPU (WSL2) with reduced `train_ratio` (128 vs 512), `batch_size` 8 (vs 16), and replay buffer 1M (vs 5M) — see [Experimental setup](#experimental-setup) below. Literature DreamerV3 on Crafter reports ~14% Crafter Score with a larger model and more compute.
 
@@ -67,28 +89,6 @@ The primary metric is **Crafter Score**: \( S = \exp(\mean(\ln(1 + s_i\%))) - 1 
 Rainbow strengths: early-game survival and wood crafting (`collect_sapling`, `place_plant`, `collect_wood`). DreamerV3 leads on mid/late-game achievements (`collect_coal`, `collect_stone`, `place_furnace`, `collect_drink`) — consistent with model-based long-horizon planning.
 
 > **Training vs eval:** During training the Rainbow agent uses NoisyNet and intrinsic motivation (`Q_ext + 0.1·Q_int`). Evaluation measures the pure extrinsic policy — consistent with the benchmark convention.
-
----
-
-## Algorithm Components
-
-**Implicit Quantile Networks (IQN)** — Models the full return distribution $Z(s, a)$ using sampled quantiles instead of predicting a single scalar $Q(s, a)$. It maps uniformly sampled probabilities $\tau \sim U(0, 1)$ to quantile values and is trained via the quantile Huber loss, allowing for a more flexible and continuous representation of the return distribution than categorical alternatives like C51.
-
-**Munchausen RL** — Augments the Bellman target for the extrinsic head by adding a clipped log-policy bonus to the immediate reward and a penalty to the bootstrap term. Following Vieillard et al. (2020), $\log \pi$ is derived entirely from the target network's softmax distribution to guarantee training stability.
-
-**Dual-head IQN** — Features a shared IMPALA-style convolutional encoder and quantile embedding network, which branches into two independent dueling heads for separate extrinsic and intrinsic value estimation. The intrinsic head uses a shorter discount ($\gamma_{\text{int}} = 0.9$) to prevent long-horizon curiosity traps, and its loss is down-weighted by $0.25\times$ to ensure the shared encoder remains primarily shaped by the extrinsic objective — a design principle inspired by NGU and Agent57.
-
-**RND + NovelD** — Combines Random Network Distillation for state novelty estimation with NovelD, which computes transition-based intrinsic rewards. NovelD ensures the agent is rewarded specifically for crossing into novel states, preventing reward stagnation in already-explored areas.
-
-**IMPALA-style encoder** — A deep residual convolutional network optimized for pixel-based RL, providing robust visual representations in complex environments such as Procgen or Crafter.
-
-**NoisyNet** — Replaces $\varepsilon$-greedy with parameter-space exploration via learned noise layers, enabling more structured and state-dependent exploration.
-
-**Prioritized Experience Replay (PER)** — SumTree-backed replay buffer that samples high-priority transitions more frequently, using mean quantile Huber loss as the TD-error proxy. Sampling bias is corrected with annealed importance-sampling weights ($\beta$).
-
-**Rainbow staples** — Double DQN (online selects, target evaluates), dueling value/advantage decomposition, n-step returns ($n = 3$), and hard target sync every 2000 learn steps (soft Polyak was unstable for distributional Q).
-
-**Replay buffer persistence** — Network checkpoints plus compressed `.npz` buffer snapshots for crash recovery without losing experience.
 
 ---
 
