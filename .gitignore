@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+wandb/
+*.pt
+*.npz
+.eggs/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+multirun/
+train.log
+*:Zone.Identifier
+W&B*

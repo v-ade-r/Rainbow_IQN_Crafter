@@ -1,0 +1,24 @@
+defaults:
+  - _self_
+  - agent: rainbow_iqn
+  - env: crafter
+  - logger: wandb
+
+seed: 42
+device: cuda
+# Official Crafter benchmark budget (Hafner et al., 2021): 1M env steps.
+# With action_repeat=1, one agent step == one env step, so total_steps
+# is directly the benchmark budget.
+total_steps: 1_000_000
+training_starts: 20_000
+train_freq: 4
+checkpoint_freq: 50_000
+log_freq: 1000
+eval_episodes: 10
+eval_freq: 50_000
+
+# Resume from a saved checkpoint (set to path string to resume, null to start fresh)
+resume_checkpoint: null
+
+# Quick pipeline test: short run with tiny buffer to verify everything works end-to-end
+test_run: false

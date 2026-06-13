@@ -1,0 +1,16 @@
+torch>=2.2
+crafter
+einops
+hydra-core
+omegaconf
+wandb
+optuna
+gradio
+pytest
+scipy
+numpy
+opencv-python-headless
+scikit-learn
+umap-learn
+matplotlib
+ruff

@@ -1,0 +1,64 @@
+gamma: 0.99
+# Separate, shorter discount for the intrinsic head: with non-episodic NovelD
+# rewards and gamma=0.99 the intrinsic Q-values diverge toward r/(1-gamma^n)
+# (~33), which hijacks action selection (agent stops chasing extrinsic reward).
+# gamma_int=0.9 caps Q_int at ~r/(1-0.9^3) ≈ r/0.27 ≈ 4 -- comparable to Q_ext.
+gamma_int: 0.9
+n_step: 3
+
+# Replay buffer
+# NOTE: 250k * (12, 64, 64) uint8 ≈ 11.7 GB RAM (fits within WSL2 default ~15 GB
+# limit). A full 1M buffer would need ~46 GB; lazy-frame storage could fit 1M in
+# ~11 GB but requires a replay refactor. PER resurfaces high-priority
+# transitions even from a partial window, so 250k is a sound choice for 1M steps.
+buffer_size: 250_000
+batch_size: 64
+per_alpha: 0.6
+per_beta_start: 0.4
+per_beta_frames: 1_000_000
+
+# Network
+encoder_type: impala
+encoder_features: 512
+n_quantiles_train: 32
+n_quantiles_eval: 64
+quantile_embedding_dim: 64
+huber_kappa: 1.0
+
+# Optimizer
+learning_rate: 1.0e-4
+adam_eps: 1.5e-4
+grad_clip_norm: 10.0
+
+# Target network: hard sync every `target_update_freq` LEARN steps.
+# With train_freq=4, 2000 learn steps = 8000 env steps -- the Rainbow / IQN /
+# M-DQN convention. Soft Polyak (tau~0.005) was empirically unstable here:
+# the target distribution chased the online distribution within ~500 env
+# steps, leaving the quantile regression with no stationary target to fit.
+target_update_freq: 2000
+
+# Intrinsic motivation (RND + NovelD)
+# rnd_beta is the action-selection weight: argmax(Q_ext + rnd_beta * Q_int).
+# History: 0.5 was too aggressive (Q_int hijacked the policy at Q_int ~ 25,
+# R collapsed). 0.1 produces a self-regulating IntPct: starts ~1.5% (Q_ext
+# leads), then organically grows to 3-5% as the agent reaches novel state
+# regions (deeper cave/crafting chains) where the predictor lags behind the
+# target. This is exactly the desired "Q_int pushes only where Q_ext is
+# flat" behaviour the dual-head setup aims for.
+rnd_beta: 0.1
+rnd_lr: 1.0e-4
+rnd_output_dim: 256
+rnd_warmup_steps: 20_000
+noveld_beta: 0.5
+
+# Loss-side weight on the intrinsic head's Huber loss. Encoder is shared
+# across both heads, so an unweighted sum splits its gradient ~50/50 between
+# the extrinsic objective and the novelty objective. 0.25 keeps Q_int
+# learning alive while letting Q_ext dominate the encoder representation
+# (NGU/Agent57 use a similar imbalance instead of separate encoders).
+loss_int_weight: 0.25
+
+# Munchausen (applied only to extrinsic head)
+munchausen_alpha: 0.9
+munchausen_tau: 0.03
+munchausen_clip: -1.0
