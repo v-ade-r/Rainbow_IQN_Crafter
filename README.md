@@ -126,6 +126,27 @@ pip install -r requirements.txt
 
 Requirements: Python ≥ 3.10, CUDA (recommended), ~15 GB RAM for the 250k RGB replay buffer.
 
+### Pretrained agent ([v1.0.0 release](https://github.com/v-ade-r/Rainbow_IQN_Crafter/releases/tag/v1.0.0))
+
+The final trained agent (~70 MB) is **not** in the git tree (`.pt` files are gitignored). Download it from the
+**[v1.0.0-rainbow-iqn-crafter-agent-final](https://github.com/v-ade-r/Rainbow_IQN_Crafter/releases/tag/v1.0.0)** release:
+
+```bash
+mkdir -p checkpoints
+curl -L -o checkpoints/agent_final.pt \
+  https://github.com/v-ade-r/Rainbow_IQN_Crafter/releases/download/v1.0.0/rainbow_iqn_agent_final.pt
+```
+
+Or with GitHub CLI:
+
+```bash
+gh release download v1.0.0 --repo v-ade-r/Rainbow_IQN_Crafter \
+  --pattern rainbow_iqn_agent_final.pt --dir checkpoints
+mv checkpoints/rainbow_iqn_agent_final.pt checkpoints/agent_final.pt
+```
+
+Trained for **1M env steps**; **Crafter Score 9.56%** over 429 post-training episodes. The checkpoint bundles IQN + Rainbow stack (Double DQN, Dueling, NoisyNet, PER, n-step), Munchausen extrinsic targets, RND + NovelD exploration, dual-head IQN, and a shared IMPALA encoder — for evaluation, reproduction, and further experiments.
+
 ---
 
 ## Usage
@@ -148,7 +169,7 @@ Resume from checkpoint:
 python scripts/train.py resume_checkpoint=checkpoints/agent_step_500000.pt
 ```
 
-W&B logging: project `rainbow-iqn-crafter`. Checkpoints saved to `checkpoints/` (`.pt` / `.npz` gitignored; push `agent_final.pt` separately when ready).
+W&B logging: project `rainbow-iqn-crafter`. Training checkpoints are saved to `checkpoints/` (`.pt` / `.npz` gitignored). The published final agent is on [GitHub Releases](https://github.com/v-ade-r/Rainbow_IQN_Crafter/releases/tag/v1.0.0).
 
 ### Evaluation (429 episodes — DreamerV3-comparable protocol)
 
